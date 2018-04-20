@@ -11,6 +11,10 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 <img src="https://cloud.githubusercontent.com/assets/1725068/18940649/21945000-8645-11e6-86ed-4a0f800e5a73.png" width="32" height="32" /> <img src="https://cloud.githubusercontent.com/assets/1725068/18940648/2192ddba-8645-11e6-864d-6d5692d55717.png" width="32" height="32" />
 
+### Releases
+
+[1.0](https://github.com/miyako/4d-plugin-scard/releases/tag/1.0)
+
 ### About
 
 WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自の拡張APDUをコールしているため）。[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールすれば，カードリーダーとして認識されますが，通信はできないようです（拡張APDUに対応していないのかもしれません）。
