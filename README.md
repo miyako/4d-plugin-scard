@@ -71,5 +71,5 @@ FeliCa: IDm（8 bytes）
 ``06``:Mifare Emulation Card    
 ``07``:ISO14443-4A  
 ``08``:ISO14443-4B  
-``09``:TypeA NFC-DEP ターゲット 
+``09``:TypeA NFC-DEP ターゲット 　
 ``0A``:FeliCa NFC-DEP ターゲット 
