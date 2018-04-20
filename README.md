@@ -40,10 +40,10 @@ info|TEXT|取得した情報（``JSON``）
 
 * ``info``オブジェクト
 
-``IDm``: ``string`` カードID（16進数）    
-``PMm``: ``string`` 製造パラメーター（16進数）  
+``IDm``: ``string`` カードUID（16進数）    
+``PMm``: ``string`` カードATS-HB/INF/PMm（16進数）  
 ``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
-``type``: ``string`` カードタイプ（16進数）   
+``type``: ``string`` カード種別（16進数）   
 
 * FeliCa独自定義（拡張）APDU
 
@@ -52,7 +52,18 @@ info|TEXT|取得した情報（``JSON``）
 カード識別IDの取得: ``FF CA F0 00 00``  
 カード名称の取得: ``FF CA F1 00 00`` 
 カード種別の取得: ``FF CA F3 00 00`` 
-``01``:ISO14443A  
+
+* カードUID
+
+ISO14443A: Cascade Level 1/2/3 の UID（4/7/10 bytes） 
+ISO14443B: PUPI（4 bytes） 
+PicoPass(iCLASS): SN（8 bytes）  
+NFC Type 1 Tag: UID（7 bytes） 
+FeliCa: IDm（8 bytes） 
+
+* カード種別
+
+``01``:ISO14443A  
 ``02``:ISO14443B  
 ``03``:PicoPassB  
 ``04``:FeliCa  
