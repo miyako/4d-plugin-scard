@@ -63,7 +63,7 @@ FeliCa: IDm（8 bytes）
 
 * カード種別
 
-``01``:ISO14443A  
+``01``:ISO14443A    
 ``02``:ISO14443B  
 ``03``:PicoPassB  
 ``04``:FeliCa  
@@ -71,5 +71,5 @@ FeliCa: IDm（8 bytes）
 ``06``:Mifare Emulation Card    
 ``07``:ISO14443-4A  
 ``08``:ISO14443-4B  
-``09``:TypeA NFC-DEP ターゲット 　
-``0A``:FeliCa NFC-DEP ターゲット 
+``09``:TypeA NFC-DEP ターゲット  
+``0A``:FeliCa NFC-DEP ターゲット  　
