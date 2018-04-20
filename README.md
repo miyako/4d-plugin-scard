@@ -49,5 +49,18 @@ info|TEXT|取得した情報（``JSON``）
 
 * FeliCa独自定義（拡張）APDU
 
-カードUIDの取得: ``FF CA 00 00 00``
-カードATS-HB/INF/PMmの取得: ``FF CA 01 00 00``
+カードUIDの取得: ``FF CA 00 00 00``  
+カードATS-HB(ISO14443-4A)/INF(ISO14443B)/PMm(FeliCa)の取得: ``FF CA 01 00 00``  
+カード識別IDの取得: ``FF CA F0 00 00``  
+カード名称の取得: ``FF CA F1 00 00`` 
+カード種別の取得: ``FF CA F3 00 00`` 
+``01``:ISO14443A  
+``02``:ISO14443B  
+``03``:PicoPassB  
+``04``:FeliCa  
+``05``:NFC Type 1 Tag    
+``06``:Mifare Emulation Card    
+``07``:ISO14443-4A  
+``08``:ISO14443-4B  
+``09``:TypeA NFC-DEP ターゲット 
+``0A``:FeliCa NFC-DEP ターゲット 
