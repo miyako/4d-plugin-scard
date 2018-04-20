@@ -5,7 +5,7 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 | carbon | cocoa | win32 | win64 |
 |:------:|:-----:|:---------:|:---------:|
-|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|
+|||<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|
 
 ### Version
 
@@ -13,9 +13,7 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 ### About
 
-WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)で検証しました。
-
-macOSでは，[``pcsc-lite``](https://pcsclite.alioth.debian.org/pcsclite.html)のシステム実装（``PCSC Framework``）をコールしています。プリインストールされた[``CCID Driver``](https://github.com/acshk/acsccid)には，SONYのPaSoRiがない（Advanced Card Systems Ltd.，あるいは[``ACR1251CL-NTTCom``](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)のような同等品が必要）ため，また内部的にFeliCa独自定義（拡張）APDUをコールしているため，実質的に非対応です。
+WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自定義拡張APDUをコールしているため）。
 
 ## Syntax
 
