@@ -79,3 +79,7 @@ FeliCa: IDm（8 bytes）
 ``08``:ISO14443-4B  
 ``09``:TypeA NFC-DEP ターゲット  
 ``0A``:FeliCa NFC-DEP ターゲット  　
+
+### Examples
+
+<img width="290" alt="2018-04-20 13 10 26" src="https://user-images.githubusercontent.com/1725068/39030535-854c2088-449d-11e8-8400-76c1ca224356.png">
