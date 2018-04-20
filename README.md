@@ -55,11 +55,11 @@ info|TEXT|取得した情報（``JSON``）
 
 * カードUID
 
-ISO14443A: Cascade Level 1/2/3 の UID（4/7/10 bytes） 
-ISO14443B: PUPI（4 bytes） 
-PicoPass(iCLASS): SN（8 bytes）  
-NFC Type 1 Tag: UID（7 bytes） 
-FeliCa: IDm（8 bytes） 
+ISO14443A: Cascade Level 1/2/3 の UID（4/7/10 bytes）  
+ISO14443B: PUPI（4 bytes）  
+PicoPass(iCLASS): SN（8 bytes）    
+NFC Type 1 Tag: UID（7 bytes）  
+FeliCa: IDm（8 bytes）  
 
 * カード種別
 
