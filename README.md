@@ -5,7 +5,7 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 | carbon | cocoa | win32 | win64 |
 |:------:|:-----:|:---------:|:---------:|
-|||<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|
+|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|
 
 ### Version
 
@@ -30,6 +30,8 @@ WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGe
 [MSDN](https://msdn.microsoft.com/ja-jp/library/windows/hardware/dn905498(v=vs.85).aspx)
 
 [RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールしても，PC/SCのAPIでカードの情報を取得することはできません（ドキュメントより）。
+
+macOSは，システムの[PCSC-Lite](http://pcsclite.alioth.debian.org)（PCSC Framework）を使用しています。システムに[ドライバー](https://github.com/acshk/acsccid)がインストールされているAdvanced Card Systems Ltd.のカードリーダー（[ACR1251CL-NTTCom](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)など）であれば，動くかもしれません（未検証）。
 
 ## Syntax
 
