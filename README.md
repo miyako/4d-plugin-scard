@@ -17,9 +17,17 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 ### About
 
-WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自の拡張APDUをコールしているため）。[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールすれば，カードリーダーとして認識されますが，通信はできないようです（拡張APDUに対応していないのかもしれません）。
+WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。
 
-システムに，カードリーダー（PaSoRi）のドライバー（"[基本ソフトウェア](https://www.sony.co.jp/Products/felica/consumer/download/windows.html)"）がインストールされていることが必要です。
+検証には[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)を使用しました。カードリーダーの（PaSoRi）のドライバー（"[基本ソフトウェア](https://www.sony.co.jp/Products/felica/consumer/download/windows.html)"）をインストールしてください。
+
+内部的にFeliCa独自の拡張APDUをコールしていますが，UIDやATSを取得するためのAPDUは，[PCSC 3 v2で定義されている](https://stackoverflow.com/questions/13051167/apdu-command-to-get-smart-card-uid/19789290#19789290)らしいので，他社のカードリーダーでも動くと思います（たぶん）。
+
+[Advanced Card Systems Ltd.の仕様書](https://www.acs.com.hk/download-manual/4414/API-ACR1251U-1.08.pdf)
+
+[SONYの仕様書](https://www.sony.co.jp/Products/felica/business/products/ICS-D004.html)
+
+[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールすれば，カードリーダーとして認識されますが，通信はできませんでした。
 
 ## Syntax
 
