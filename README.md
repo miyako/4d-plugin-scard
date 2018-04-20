@@ -15,7 +15,7 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)で検証しました。
 
-macOSでは，[``pcsc-lite``](https://pcsclite.alioth.debian.org/pcsclite.html)のシステム実装（``PCSC Framework``）をコールしています。プリインストールされた[``CCID Driver``](https://github.com/acshk/acsccid)のカードリーダー（Advanced Card Systems Ltd.，あるいは[``ACR1251CL-NTTCom``](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)のような同等品）であれば，動くかもしれません（未検証）。
+macOSでは，[``pcsc-lite``](https://pcsclite.alioth.debian.org/pcsclite.html)のシステム実装（``PCSC Framework``）をコールしています。プリインストールされた[``CCID Driver``](https://github.com/acshk/acsccid)には，SONYのPaSoRiがない（Advanced Card Systems Ltd.，あるいは[``ACR1251CL-NTTCom``](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)のような同等品が必要）ため，また内部的にFeliCa独自定義（拡張）APDUをコールしているため，実質的に非対応です。
 
 ## Syntax
 
@@ -42,7 +42,12 @@ info|TEXT|取得した情報（``JSON``）
 
 * ``info``オブジェクト
 
-``IDm``: ``string`` 製造ID（16進数）    
+``IDm``: ``string`` カードID（16進数）    
 ``PMm``: ``string`` 製造パラメーター（16進数）  
 ``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
 ``type``: ``string`` カードタイプ（16進数）   
+
+* FeliCa独自定義（拡張）APDU
+
+カードUIDの取得: ``FF CA 00 00 00``
+カードATS-HB/INF/PMmの取得: ``FF CA 01 00 00``
