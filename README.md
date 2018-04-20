@@ -66,10 +66,13 @@ info|TEXT|取得した情報（``JSON``）
 ``typeName``: ``string`` カード種別名称  
 ``name``: ``string`` カード名称（検証した範囲では常に空でした）  
 
-* FeliCa独自定義（拡張）APDU
+* PCSC 3 v2で定義されているAPDU
 
 カードUIDの取得: ``FF CA 00 00 00``  
 カードATS-HB(ISO14443-4A)/INF(ISO14443B)/PMm(FeliCa)の取得: ``FF CA 01 00 00``  
+
+* FeliCa独自定義（拡張）APDU
+
 カード識別IDの取得: ``FF CA F0 00 00``  
 カード名称の取得: ``FF CA F1 00 00``  
 カード種別の取得: ``FF CA F3 00 00``  
