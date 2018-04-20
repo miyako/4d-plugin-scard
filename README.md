@@ -36,7 +36,7 @@ Parameter|Type|Description
 reader|TEXT|カードリーダーの名称
 mode|LONGINT|[共有モード](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379473(v=vs.85).aspx): ``SCARD_SHARE_SHARED``または``SCARD_SHARE_EXCLUSIVE``
 protocols|LONGINT|[プロトコル](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379473(v=vs.85).aspx): ``SCARD_PROTOCOL_T0``と``SCARD_PROTOCOL_T1``の組み合わせ
-timeout|LONGINT|制御を返すまでのタイムアウト（ミリ秒）
+timeout|LONGINT|タイムアウト（ミリ秒）カードが認識できない場合，この時間まで待機します。
 error|LONGINT|エラーコード（``0``=成功）
 info|TEXT|取得した情報（``JSON``）
 
