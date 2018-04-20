@@ -45,8 +45,8 @@ info|TEXT|取得した情報（``JSON``）
 ``IDm``: ``string`` カードUID（16進数）    
 ``PMm``: ``string`` カードATS-HB/INF/PMm（16進数）  
 ``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
-``card``: ``string`` カード識別ID（16進数） 
-``type``: ``string`` カード種別（16進数） 
+``card``: ``string`` カード識別ID（16進数）  
+``type``: ``string`` カード種別（16進数）  
 ``typeName``: ``string`` カード種別名称  
 ``name``: ``string`` カード名称（検証した範囲では常に空でした）  
 
