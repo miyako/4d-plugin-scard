@@ -1,0 +1,1 @@
+﻿{"name":"SCARD","id":20000,"commands":[{"theme":"SCARD","syntax":"SCARD Get info(&T;&L;&L;&L;&L):T"},{"theme":"SCARD","syntax":"SCARD READER LIST(&Y;&Y)"}]}
