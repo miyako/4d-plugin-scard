@@ -13,7 +13,7 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 ### About
 
-WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自の拡張APDUをコールしているため）RC-S330は，「PC/SCアクティベーター for Type B」をインストールすればデバイスとして認識されますが，通信はできません（拡張APDUに対応していない..?）。
+WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自の拡張APDUをコールしているため）。[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールすれば，カードリーダーとして認識されますが，通信はできないようです（拡張APDUに対応していないのかもしれません）。
 
 システムに，カードリーダー（PaSoRi）のドライバー（"[基本ソフトウェア](https://www.sony.co.jp/Products/felica/consumer/download/windows.html)"）がインストールされていることが必要です。
 
@@ -45,7 +45,10 @@ info|TEXT|取得した情報（``JSON``）
 ``IDm``: ``string`` カードUID（16進数）    
 ``PMm``: ``string`` カードATS-HB/INF/PMm（16進数）  
 ``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
-``type``: ``string`` カード種別（16進数）   
+``card``: ``string`` カード識別ID（16進数）
+``type``: ``string`` カード種別（16進数）
+``typeName``: ``string`` カード種別名称  
+``name``: ``string`` カード名称（検証した範囲では常に空でした）  
 
 * FeliCa独自定義（拡張）APDU
 
@@ -54,6 +57,7 @@ info|TEXT|取得した情報（``JSON``）
 カード識別IDの取得: ``FF CA F0 00 00``  
 カード名称の取得: ``FF CA F1 00 00`` 
 カード種別の取得: ``FF CA F3 00 00`` 
+カード種別名称の取得: ``FF CA F4 00 00``  
 
 * カードUID
 
