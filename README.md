@@ -27,7 +27,9 @@ WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGe
 
 [SONYの仕様書](https://www.sony.co.jp/Products/felica/business/products/ICS-D004.html)
 
-[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールすれば，カードリーダーとして認識されますが，カードの情報を取得することはできません。PC/SCアクティベーターをインストールしても，RC-S330では拡張APIが利用できない，と仕様書に記述されていました。
+[MSDN](https://msdn.microsoft.com/ja-jp/library/windows/hardware/dn905498(v=vs.85).aspx)
+
+[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールしても，PC/SCのAPIでカードの情報を取得することはできません（ドキュメントより）。
 
 ## Syntax
 
