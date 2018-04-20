@@ -83,3 +83,59 @@ FeliCa: IDm（8 bytes）
 ### Examples
 
 <img width="290" alt="2018-04-20 13 10 26" src="https://user-images.githubusercontent.com/1725068/39030535-854c2088-449d-11e8-8400-76c1ca224356.png">
+
+```
+$Readers:=OBJECT Get pointer(Object named;"Readers")
+
+$event:=Form event
+
+Case of 
+	: ($event=On Unload)
+		
+		SET TIMER(0)
+		
+	: ($event=On Load)
+		
+		SCARD READER LIST ($Readers->)
+		
+		If (Size of array($Readers->)#0)
+			$Readers->:=1
+			SET TIMER(50)
+		End if 
+		
+	: ($event=On Timer)
+		
+		$reader:=$Readers->{$Readers->}
+		$mode:=SCARD_SHARE_SHARED
+		$protocols:=SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1
+		$timeout:=50
+		$error:=0
+		
+		$info:=SCARD Get info ($reader;$mode;$protocols;$timeout;$error)
+		
+		If ($error=0)
+			
+			$o:=JSON Parse($info)
+			
+			$state:=OB Get($o;"state";Is longint)
+			
+			If ($state & SCARD_STATE_PRESENT)=SCARD_STATE_PRESENT
+				OBJECT Get pointer(Object named;"IDm")->:=OB Get($o;"IDm";Is text)
+				OBJECT Get pointer(Object named;"PMm")->:=OB Get($o;"PMm";Is text)
+				OBJECT Get pointer(Object named;"type")->:=OB Get($o;"type";Is text)
+				OBJECT Get pointer(Object named;"typeName")->:=OB Get($o;"typeName";Is text)
+				OBJECT Get pointer(Object named;"card")->:=OB Get($o;"card";Is text)
+				OBJECT Get pointer(Object named;"cardName")->:=OB Get($o;"cardName";Is text)
+			Else 
+				OBJECT Get pointer(Object named;"IDm")->:=""
+				OBJECT Get pointer(Object named;"PMm")->:=""
+				OBJECT Get pointer(Object named;"type")->:=""
+				OBJECT Get pointer(Object named;"typeName")->:=""
+				OBJECT Get pointer(Object named;"card")->:=""
+				OBJECT Get pointer(Object named;"cardName")->:=""
+			End if 
+      
+		End if 
+		
+End case 
+```
