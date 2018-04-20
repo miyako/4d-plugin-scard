@@ -39,3 +39,10 @@ protocols|LONGINT|[プロトコル](https://msdn.microsoft.com/en-us/library/win
 timeout|LONGINT|制御を返すまでのタイムアウト（ミリ秒）
 error|LONGINT|エラーコード（``0``=成功）
 info|TEXT|取得した情報（``JSON``）
+
+* ``info``オブジェクト
+
+``IDm``: ``string`` 製造ID（16進数）    
+``PMm``: ``string`` 製造パラメーター（16進数）  
+``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)
+``type``: ``string`` カードタイプ（16進数）   
