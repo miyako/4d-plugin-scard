@@ -15,6 +15,8 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)専用です（内部的にFeliCa独自の拡張APDUをコールしているため）。
 
+システムに，カードリーダー（PaSoRi）のドライバー（"[基本ソフトウェア](https://www.sony.co.jp/Products/felica/consumer/download/windows.html)"）がインストールされていることが必要です。
+
 ## Syntax
 
 ```
