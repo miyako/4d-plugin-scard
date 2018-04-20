@@ -58,7 +58,7 @@ info|TEXT|取得した情報（``JSON``）
 
 * ``info``オブジェクト
 
-``IDm``: ``string`` カードUID（16進数）    
+``IDm``: ``string`` カードUID（16進数）  
 ``PMm``: ``string`` カードATS-HB/INF/PMm（16進数）  
 ``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
 ``card``: ``string`` カード識別ID（16進数）  
