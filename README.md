@@ -63,7 +63,7 @@ FeliCa: IDm（8 bytes）
 
 * カード種別
 
-``01``:ISO14443A     
+``01``:ISO14443A  
 ``02``:ISO14443B  
 ``03``:PicoPassB  
 ``04``:FeliCa  
