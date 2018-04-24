@@ -546,27 +546,18 @@ void SCARD_READER_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 
 	SCARDCONTEXT hContext;
 	LONG lResult;
-		
-	LPTSTR lpszReaderName = NULL;
+	
 	LPTSTR pReader;
 #if VERSIONWIN
-	LPTSTR lpszCardName = NULL;
 	LPTSTR pCard;
 #endif
 	
 	lResult = SCardEstablishContextEx(SCARD_SCOPE_USER, NULL, NULL, &hContext);
 	if (lResult == SCARD_S_SUCCESS)
 	{
-#if USE_FRAMEWORK
-		/* SCARD_AUTOALLOCATE not supported in framework */
-		uint32_t pcchReaders = 4096;
-		char mszReaders[4096];
-		lResult = SCardListReaders(hContext, SCARD_ALL_READERS, (LPTSTR)&mszReaders, &pcchReaders);
-		lpszReaderName = mszReaders;
-#else
-		DWORD dwAutoAllocate = SCARD_AUTOALLOCATE;
-		lResult = SCardListReaders(hContext, SCARD_ALL_READERS, (LPTSTR)&lpszReaderName, &dwAutoAllocate);
-#endif
+		
+		DWORD len;
+		lResult = SCardListReaders(hContext, SCARD_ALL_READERS, NULL, &len);
 		switch (lResult)
 		{
 			case SCARD_E_NO_READERS_AVAILABLE:
@@ -574,50 +565,76 @@ void SCARD_READER_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 			case SCARD_E_READER_UNAVAILABLE:
 				break;
 			case SCARD_S_SUCCESS:
-				Param1_readers.setSize(1);
-				pReader = lpszReaderName;
-				while ('\0' != *pReader)
+			{
+				std::vector<TCHAR>buf(len);
+				lResult = SCardListReaders(hContext, SCARD_ALL_READERS, &buf[0], &len);
+				switch (lResult)
 				{
+					case SCARD_E_NO_READERS_AVAILABLE:
+						break;
+					case SCARD_E_READER_UNAVAILABLE:
+						break;
+					case SCARD_S_SUCCESS:
+					{
+						pReader = (LPTSTR)&buf[0];
+						if(pReader)
+						{
+							Param1_readers.setSize(1);
+							while ('\0' != *pReader)
+							{
 #if VERSIONWIN
-					CUTF16String reader = (PA_Unichar *)pReader;
-					Param1_readers.appendUTF16String(&reader);
-					pReader = pReader + wcslen((wchar_t *)pReader) + 1;
+								CUTF16String reader = (PA_Unichar *)pReader;
+								Param1_readers.appendUTF16String(&reader);
 #else
-					CUTF8String reader = (uint8_t *)pReader;
-					Param1_readers.appendUTF8String(&reader);
-					pReader = pReader + strlen((char *)pReader) + 1;
+								CUTF8String reader = (uint8_t *)pReader;
+								Param1_readers.appendUTF8String(&reader);
 #endif
-				}
-#if USE_FRAMEWORK
-#else
-				SCardFreeMemory(hContext, lpszReaderName);
-#endif				
-				break;
-			default:
-				break;
-		}/* SCardListReaders */
+								pReader = pReader + reader.length() + 1;
+							}
 #if VERSIONWIN
-		lResult = SCardListCards(NULL, NULL, NULL, NULL, (LPTSTR)&lpszCardName, &dwAutoAllocate);
-		switch (lResult)
-		{
-			case SCARD_S_SUCCESS:
-				Param2_cards.setSize(1);
-				pCard = lpszCardName;
-				while ('\0' != *pCard)
-				{
-					CUTF16String card = (PA_Unichar *)pCard;
-					Param2_cards.appendUTF16String(&card);
-					pCard = pCard + wcslen((wchar_t *)pCard) + 1;
-				}
-				SCardFreeMemory(hContext, lpszCardName);
-					break;
-				default:
-					break;
-				}/* SCardListCards */
+							lResult = SCardListCards(NULL, NULL, NULL, NULL, NULL, &len);
+							switch (lResult)
+							{
+								case SCARD_S_SUCCESS:
+								{
+									std::vector<TCHAR>buf(len);
+									lResult = SCardListCards(NULL, NULL, NULL, NULL, &buf[0], &len);
+									switch (lResult)
+									{
+										case SCARD_S_SUCCESS:
+										{
+											pCard = (LPTSTR)&buf[0];
+											if(pCard)
+											{
+												Param2_cards.setSize(1);
+												while ('\0' != *pCard)
+												{
+													CUTF16String card = (PA_Unichar *)pCard;
+													Param2_cards.appendUTF16String(&card);
+													pCard = pCard + card.length() + 1;
+												}
+											}
+										}
+											break;
+										default:
+											break;
+									}/* SCardListCards */
+									
+								}
+									break;
+							}/* SCardListCards(1) */
 #endif
+						}
+
+					}
+						break;
+				}/* SCardListReaders(2) */
+				
+			}
+				break;
+		}/* SCardListReaders(1) */
 		SCardReleaseContext(hContext);
 	}/* SCardEstablishContext */
-	
 	Param1_readers.toParamAtIndex(pParams, 1);
 	Param2_cards.toParamAtIndex(pParams, 2);
 }

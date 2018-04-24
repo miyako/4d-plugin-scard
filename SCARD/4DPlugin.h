@@ -45,7 +45,8 @@ void SCARD_READER_LIST(sLONG_PTR *pResult, PackagePtr pParams);
 #endif
 
 #if VERSIONMAC
-#define LPTSTR LPSTR
+typedef char TCHAR;
+typedef LPSTR LPTSTR;
 #endif
 
 typedef enum
