@@ -13,6 +13,8 @@ basic PC/SC implementation (read ``IDm``, ``PMm``)
 
 ### Releases
 
+[1.1](https://github.com/miyako/4d-plugin-scard/releases/tag/1.1)
+
 [1.0](https://github.com/miyako/4d-plugin-scard/releases/tag/1.0)
 
 ### About
