@@ -36,7 +36,9 @@ LONG SCardEstablishContextEx(DWORD dwScope, LPCVOID pvReserved1, LPCVOID pvReser
 
 #pragma mark JSON
 
-#ifndef NOJSON	
+#if USE_JSON_CPP
+#else
+	
 void json_stringify(JSONNODE *json, C_TEXT &t)
 {
 	//json_char *json_string = json_write_formatted(json);
@@ -517,7 +519,33 @@ void SCARD_Get_info(sLONG_PTR *pResult, PackagePtr pParams)
 		}/* SCardGetStatusChange */
 		SCardReleaseContext(hContext);
 	}/* SCardEstablishContext */
-#ifndef NOJSON	
+    
+#if USE_JSON_CPP
+    using namespace Json;
+    Value root;
+    CUTF8String u8;
+    Param_IDm.copyUTF8String(&u8);
+    root["IDm"] = (const char *)u8.c_str();
+    Param_PMm.copyUTF8String(&u8);
+    root["PMm"] = (const char *)u8.c_str();
+
+    root["state"] = Param_state.getIntValue();
+    Param_Type.copyUTF8String(&u8);
+    root["type"] = (const char *)u8.c_str();
+    Param_IDm.copyUTF8String(&u8);
+    root["card"] = (const char *)u8.c_str();
+    Param_TypeName.copyUTF8String(&u8);
+    root["typeName"] = (const char *)u8.c_str();
+    Param_Name.copyUTF8String(&u8);
+    root["name"] = (const char *)u8.c_str();
+    
+    StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    using namespace std;
+    std::string json = writeString(builder, root);
+    returnValue.setUTF8String((const uint8_t *)json.c_str(), json.length());
+    
+#else
 	JSONNODE *json = json_new(JSON_NODE);
 	json_set_s(json, L"IDm", Param_IDm);
 	json_set_s(json, L"PMm", Param_PMm);

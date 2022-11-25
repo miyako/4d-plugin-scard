@@ -23,8 +23,12 @@
 #include "winscard.h"
 #endif
 
-#ifndef NOJSON
-#include "libjson.h"
+#define USE_JSON_CPP 1
+
+#if USE_JSON_CPP
+#include "json/json.h"
+#else
+#include "libjson/libjson.h"
 #endif
 
 // --- SCARD
