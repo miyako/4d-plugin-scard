@@ -26,6 +26,8 @@ macOSは，システムの[PCSC-Lite](http://pcsclite.alioth.debian.org)（PCSC 
 
 PCSC Framworkを公証サンドボックスアプリで使用するためには，[com.apple.security.smartcard](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_smartcard?language=objc)エンタイトルメント付きでアプリがコード署名されていなければなりません。エンタイトルメントは，プラグインではなく，アプリ本体側のコード署名に含まれている必要があります。エンタイトルメント付きでアプリをコード署名する方法については[コード署名ツール](https://github.com/miyako/4d-class-build-application)を参照してください。
 
+[無料メンバーシップでコード署名](https://github.com/miyako/4d-plugin-scard/blob/master/with-free-account.md)も参照
+
 ## Syntax
 
 ```
