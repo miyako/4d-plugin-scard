@@ -24,6 +24,8 @@ WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGe
 
 macOSは，システムの[PCSC-Lite](http://pcsclite.alioth.debian.org)（PCSC Framework）を使用しています。システムに[ドライバー](https://github.com/acshk/acsccid)がインストールされているAdvanced Card Systems Ltd.のカードリーダー（[ACR1251CL-NTTCom](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)など）であれば，動くかもしれません（未検証）。
 
+PCSC Framworkを公証サンドボックスアプリで使用するためには，[com.apple.security.smartcard](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_smartcard?language=objc)エンタイトルメント付きでアプリがコード署名されていなければなりません。エンタイトルメントは，プラグインではなく，アプリ本体側のコード署名に含まれている必要があります。エンタイトルメント付きでアプリをコード署名する方法については[コード署名ツール](https://github.com/miyako/4d-class-build-application)を参照してください。
+
 ## Syntax
 
 ```
