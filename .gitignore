@@ -1,6 +1,6 @@
 .DS_Store
 build/
-test/Data/Logs/
+test/Data/
 test/Logs/
 test/userPreferences.*
 test/Project/DerivedData/
