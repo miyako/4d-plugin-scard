@@ -1,0 +1,62 @@
+# Compile check for branches and pull requests: builds Windows (x64) and
+# macOS (arm64 + x86_64) without signing, notarizing or publishing anything.
+# Releases are made by release.yml from a v*.*.* tag.
+
+name: Build check
+
+on:
+  push:
+    branches-ignore:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_NAME: SCARD
+  MACOS_DEPLOYMENT_TARGET: '11.5'
+
+jobs:
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: build x64
+        shell: cmd
+        run: |
+          msbuild "%PRODUCT_NAME%.sln" /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m
+
+  build-macos:
+    name: Build macOS (arm64 + x86_64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          set -euo pipefail
+          xcodebuild -project "${PRODUCT_NAME}.xcodeproj" \
+            -target "${PRODUCT_NAME}" \
+            -configuration Default \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            MACOSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="$PWD/test/Plugins" \
+            build
+
+      - name: verify
+        run: |
+          set -euo pipefail
+          BIN="test/Plugins/${PRODUCT_NAME}.bundle/Contents/MacOS/${PRODUCT_NAME}"
+          test -f "$BIN"
+          lipo -info "$BIN"
+          lipo -archs "$BIN" | grep -q arm64
+          lipo -archs "$BIN" | grep -q x86_64
