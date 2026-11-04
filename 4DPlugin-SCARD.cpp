@@ -22,6 +22,9 @@ static Json::Value scardStorage;
    Get status can run at the same time in different preemptive processes */
 static std::mutex scardTasksMutex;
 static std::map< std::string, std::future<void> >scardTasks;
+/* set when the plugin unloads: running reads stop polling instead of
+   holding up the quit for up to their timeout */
+static std::atomic<bool> scardCancelled(false);
 
 #pragma mark -
 
@@ -62,6 +65,26 @@ static void scard_clear_all() {
 
 #pragma mark -
 
+/* every command returns an object: if one throws (std::bad_alloc, std::system_error
+   when no thread can be started, ...), still return one instead of nothing */
+static void scard_call(void (*command)(PA_PluginParameters), PA_PluginParameters params) {
+    try {
+        command(params);
+    } catch (const std::exception& e) {
+        PA_ObjectRef status = PA_CreateObject();
+        ob_set_b(status, L"success", false);
+        ob_set_b(status, L"complete", true);
+        ob_set_s(status, L"errorMessage", e.what());
+        PA_ReturnObject(params, status);
+    } catch (...) {
+        PA_ObjectRef status = PA_CreateObject();
+        ob_set_b(status, L"success", false);
+        ob_set_b(status, L"complete", true);
+        ob_set_s(status, L"errorMessage", "unexpected exception");
+        PA_ReturnObject(params, status);
+    }
+}
+
 void PluginMain(PA_long32 selector, PA_PluginParameters params) {
     
 	try
@@ -71,17 +94,18 @@ void PluginMain(PA_long32 selector, PA_PluginParameters params) {
 			// --- SCARD
             
 			case 1 :
-				SCARD_Get_readers(params);
+				scard_call(SCARD_Get_readers, params);
 				break;
 			case 2 :
-				SCARD_Read_tag(params);
+				scard_call(SCARD_Read_tag, params);
 				break;
             case 3 :
-                SCARD_Get_status(params);
+                scard_call(SCARD_Get_status, params);
                 break;
 
             case kDeinitPlugin :
             case kServerDeinitPlugin :
+                scardCancelled = true;
                 scard_clear_all();
                 break;
         }
@@ -194,23 +218,6 @@ static int packet_init(usb_device_info *devinfo, int timeout) {
 
   // ack command
   memcpy(cmd, "\x00\x00\xff\x00\xff\x00", 6);
-      
-  ret = libusb_bulk_transfer(devinfo->dh, devinfo->ep_out,
-                 (unsigned char *)cmd, sizeof(cmd), &len, timeout);
-    
-  if(ret < 0) std::cout << "data send error..." << std::endl;
-    
-  return ret;
-}
-
-static int packet_init_data(usb_device_info *devinfo, int timeout) {
-    
-  uint8_t cmd[2];
-  int ret;
-  int len;
-
-  // data command
-  memcpy(cmd, "\xff\xff", 2);
       
   ret = libusb_bulk_transfer(devinfo->dh, devinfo->ep_out,
                  (unsigned char *)cmd, sizeof(cmd), &len, timeout);
@@ -572,6 +579,11 @@ static void SCARD_Get_readers(PA_PluginParameters params) {
     }
 #endif
     
+#if VERSIONMAC
+    if(errorMessage.length() != 0) {
+        ob_set_s(status, L"errorMessage", errorMessage.c_str());
+    }
+#endif
     ob_set_b(status, L"success", success);
     ob_set_c(status, L"readers", readers);
     PA_ReturnObject(params, status);
@@ -641,7 +653,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
         scardStorage[uuid] = threadCtx;
     }
     
-    auto func = [](std::string uuid, std::string slotName) {
+    auto readTag = [](std::string uuid, std::string slotName) {
                 
         char nfc_type = 'F';
         unsigned int timeout = 60;
@@ -657,6 +669,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
             }
         }
         
+#if VERSIONWIN
+		/* Windows only: the RC-S380 needs a different SELECT FILE encoding */
 		bool is_pasori_s380 = false;
 
 		if ((slotName == "Sony FeliCa Port/PaSoRi 3.0 0")
@@ -666,6 +680,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
 			) {
 			is_pasori_s380 = true;
 		}
+#endif
 
         std::string errorMessage;
         
@@ -760,7 +775,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                     time_t elapsedTime = abs(startTime - now);
                     elapsedTime = abs(anchorTime - now);
 
-                    if(elapsedTime < timeout) {
+                    if((elapsedTime < timeout) && (!scardCancelled)) {
                         size_t len = 0L;
                         switch (libusb_device_id) {
                             case LIBUSB_SONY_RC_S330:
@@ -805,7 +820,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                     /*
                                                      00FE :フェリカネットワークス社が管理する共通領域を示すシステムコード
                                                      0003 :交通系
-                                                     802B :交通系（せたまるとIruCa）
+                                                     80DE :IruCa（高松琴平電鉄）
+                                                     802B :（元のコメントでは「せたまるとIruCa」。コードでは使用していない）
                                                      */
                                                     
                                                     if ((resp[i] == 0x0003) || (resp[i] == 0x80de)) {
@@ -991,7 +1007,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                 uint8_t bd[16];
                                 std::string hex;
                                 
-                                packet_write(devinfop, cmd, sizeof(cmd), usbbufp, timeout);//InCommRF
+                                packet_write(devinfop, cmd, sizeof(cmd), usbbufp, LIBUSB_API_TIMEOUT);//InCommRF (was timeout: seconds passed as ms)
                                 
                                 isPolling = true;
                                 time_t startTime = time(0);
@@ -1001,7 +1017,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                     time_t elapsedTime = abs(startTime - now);
                                     elapsedTime = abs(anchorTime - now);
                                     
-                                    if(elapsedTime < timeout) {
+                                    if((elapsedTime < timeout) && (!scardCancelled)) {
                                         len = packet_sens_req(devinfop, nfc_type, usbbufp, LIBUSB_API_TIMEOUT_FOR_POLLING);
                                         if(len > 0) {
                                             if(usbbuf[9] == 0x05 && usbbuf[10] == 0x00) {
@@ -1032,7 +1048,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                 if(cmd[20] == 19){
                                                     isPolling = false;
                                                 }else{
-                                                    packet_write(devinfop, cmd, sizeof(cmd), usbbufp, timeout);//InCommRF
+                                                    packet_write(devinfop, cmd, sizeof(cmd), usbbufp, LIBUSB_API_TIMEOUT);//InCommRF (was timeout: seconds passed as ms)
                                                 }
                                             }
                                         }else{
@@ -1276,9 +1292,19 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                             
                         }];
                         // wait for the asynchronous blocks to finish
-                        dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+                        bool cancelled = false;
+                        while (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC)) != 0) {
+                            if(scardCancelled) {
+                                cancelled = true;
+                                break;
+                            }
+                        }
                         /* MRC: balance dispatch_semaphore_create; blocks still pending hold their own reference */
                         dispatch_release(sem);
+                        if(cancelled) {
+                            /* plugin unloading: pending blocks may still write IDm etc., so don't read them */
+                            return;
+                        }
                     }else{
                         errorMessage = "TKSmartCard::makeSmartCard() failed";
                     }
@@ -1357,7 +1383,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                             
                             elapsedTime = abs(anchorTime - now);
                             
-                            if(elapsedTime < timeout) {
+                            if((elapsedTime < timeout) && (!scardCancelled)) {
 
                                 if (readerState.dwEventState & SCARD_STATE_EMPTY) {
                                     /* with dwCurrentState left at UNAWARE the call returns at once: busy loop */
@@ -1600,7 +1626,33 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                 scardStorage[uuid]["success"] = success;
                 scardStorage[uuid]["complete"] = true;
                 scardStorage[uuid]["serviceDataJson"] = serviceDataJson;
+#if VERSIONMAC
+                /* RC-S380 Type B (ATQB) */
+                scardStorage[uuid]["nfcid"] = nfcid;
+                scardStorage[uuid]["appdata"] = appdata;
+                scardStorage[uuid]["pinfo"] = pinfo;
+                scardStorage[uuid]["cid"] = cid;
+#endif
             }
+        }
+    };
+    
+    /* an exception in the worker would leave complete=false forever */
+    auto func = [readTag](std::string uuid, std::string slotName) {
+        std::string errorMessage;
+        try {
+            readTag(uuid, slotName);
+            return;
+        } catch (const std::exception& e) {
+            errorMessage = e.what();
+        } catch (...) {
+            errorMessage = "unexpected exception";
+        }
+        std::lock_guard<std::mutex> lock(scardMutex);
+        if(scardStorage.isMember(uuid)) {
+            scardStorage[uuid]["errorMessage"] = errorMessage;
+            scardStorage[uuid]["success"] = false;
+            scardStorage[uuid]["complete"] = true;
         }
     };
     
@@ -1672,7 +1724,6 @@ static void SCARD_Get_status(PA_PluginParameters params) {
         
 //        ob_set_s(status, L"serviceDataJson", serviceDataJson.c_str());
         
-        PA_ulong32 version = PA_Get4DVersion() & 0x0000FFFF;
         PA_Variable params[2], result;
         PA_ObjectRef object = NULL;
         PA_Unistring string;

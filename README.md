@@ -68,6 +68,7 @@ status:=SCARD Get readers(options)
 | `readers` | Collection | One object per reader |
 | `readers[].slotName` | Text | Reader name; pass it to [SCARD Read tag](#scard-read-tag) |
 | `warning` | Text | macOS only: the `com.apple.security.smartcard` entitlement is missing |
+| `errorMessage` | Text | macOS only: CryptoTokenKit is not available |
 
 ### Description
 
@@ -120,7 +121,7 @@ The command returns immediately; the read runs on a background thread. Poll [SCA
 
 How the card is read depends on the reader:
 
-- **macOS, RC-S380**: polls for a card of the `card` type until `timeout` seconds have passed. FeliCa returns `IDm` and `PMm`. Type B is detected (`success` becomes `True`) but its identifiers are not returned yet. Type A is not supported (the anti-collision sequence is not implemented), so the read runs until `timeout`.
+- **macOS, RC-S380**: polls for a card of the `card` type until `timeout` seconds have passed. FeliCa returns `IDm` and `PMm`. Type B returns `nfcid`, `appdata`, `pinfo` and `cid` (from 4.0.1). Type A is not supported (the anti-collision sequence is not implemented), so the read runs until `timeout`.
 - **macOS, RC-S310/320/330**: polls once for a FeliCa card (about 2 seconds); `timeout` and `card` are not used. With `system`, the history is read from system code `0003` or `80DE`.
 - **macOS, other readers** (CryptoTokenKit): reads `IDm` with `FF CA 00 00 00` and `PMm` with `FF CA 01 00 00` from the card already on the reader. There is no wait: if no card is present, the read completes at once with `success` `False`. `timeout` and `card` are not used.
 - **Windows** (PC/SC): waits up to `timeout` seconds for a card, then reads `IDm` and `PMm` with the same commands. `card` is not used.
@@ -173,7 +174,11 @@ status:=SCARD Get status(uuid)
 | `IDm` | Text | Card UID (FeliCa IDm), lowercase hex. Absent if not read. |
 | `PMm` | Text | FeliCa PMm (or ATS historical bytes), lowercase hex. Absent if not read. |
 | `serviceData` | Object | Only with `system`: `code` (`"090f"`) and `data`, a collection of hex block strings |
-| `errorMessage` | Text | macOS CryptoTokenKit only: why the reader could not be opened |
+| `nfcid` | Text | RC-S380 on macOS, Type B only: PUPI (4 bytes, hex). From 4.0.1. |
+| `appdata` | Text | RC-S380 on macOS, Type B only: application data (4 bytes, hex). From 4.0.1. |
+| `pinfo` | Text | RC-S380 on macOS, Type B only: protocol info (3 bytes, hex). From 4.0.1. |
+| `cid` | Text | RC-S380 on macOS, Type B only: CID (1 byte, hex). From 4.0.1. |
+| `errorMessage` | Text | Why the read failed: the reader could not be opened (macOS CryptoTokenKit), or an unexpected internal error (from 4.0.1) |
 
 ### Description
 
@@ -222,9 +227,10 @@ Until ($result.complete) | (Milliseconds>$deadline)
 - **PaSoRi missing from the list on macOS.** The plugin finds it by USB vendor/product ID; check the USB connection and adapter, and that no other application holds the device.
 - **Read never completes with `success`.** No card was presented within `timeout` (RC-S380, Windows), or no card was on the reader when the read started (macOS CryptoTokenKit), or the card type does not match `card` (RC-S380).
 - **Polling never sees `complete`.** The `uuid` is wrong, or its completed result was already returned once. Keep only the first completed result.
-- **Type B on the RC-S380 returns `success` with no identifiers.** Known gap; the PUPI and application data are read but not returned yet.
+- **Type B on the RC-S380 returns `success` with no identifiers.** Fixed in 4.0.1; 4.0.0 read them but did not return them.
 - **`090f` read fails behind a USB-C AV adapter (RC-S380).** Use a plain USB-C to USB adapter.
-- **Quitting 4D waits for running reads.** On quit, the plugin waits for every unfinished read to end, which can take up to its `timeout`.
+- **Quitting 4D waits for running reads.** In 4.0.0 this could take up to each read's `timeout`. From 4.0.1, unfinished reads are cancelled on quit. They stop after the reader request in progress, which normally takes under 2 seconds; a USB poll on the RC-S380 can take up to 25 seconds if the reader stops responding.
+- **An unexpected internal error** (out of memory, no thread available) is reported as `success` = `False` with an `errorMessage`, from 4.0.1. In 4.0.0 the command returned nothing.
 
 ---
 

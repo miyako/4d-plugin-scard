@@ -57,6 +57,7 @@ static bool checkAccess(PA_ObjectRef status);
 #include <thread>
 #include <mutex>
 #include <future>
+#include <atomic>
 
 #pragma mark -
 
