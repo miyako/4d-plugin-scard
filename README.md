@@ -105,7 +105,7 @@ status:=SCARD Read tag(params)
 | Parameter | Type | Description |
 |---|---|---|
 | `params.slotName` | Text | Reader name from [SCARD Get readers](#scard-get-readers) |
-| `params.timeout` | Integer | Seconds to wait for a card. Default `60`. Values outside 1–86400 are ignored (since this branch). See below for which readers use it. |
+| `params.timeout` | Integer | Seconds to wait for a card, and again for the usage history. Default `60`. Values outside 1–86400 are ignored. |
 | `params.card` | Text | `"FeliCa"` (default), `"TypeB"` or `"TypeA"`. Only used by the RC-S380 on macOS. |
 | `params.system` | Boolean | `True` to also read the FeliCa usage history (service `090f`). Default `False`. |
 | Result | Object | See below |
@@ -119,14 +119,18 @@ status:=SCARD Read tag(params)
 
 The command returns immediately; the read runs on a background thread. Poll [SCARD Get status](#scard-get-status) with the returned `uuid` until `complete` is `True`.
 
-How the card is read depends on the reader:
+Every reader follows the same sequence: open the reader, wait up to `timeout` seconds for a card, read its identifiers, then, with `system`, read the usage history (service `090f`, blocks 0 to 19) within a second `timeout` window. Reading stops at the first block that cannot be read.
 
-- **macOS, RC-S380**: polls for a card of the `card` type until `timeout` seconds have passed. FeliCa returns `IDm` and `PMm`. Type B returns `nfcid`, `appdata`, `pinfo` and `cid` (from 4.0.1). Type A is not supported (the anti-collision sequence is not implemented), so the read runs until `timeout`.
-- **macOS, RC-S310/320/330**: polls once for a FeliCa card (about 2 seconds); `timeout` and `card` are not used. With `system`, the history is read from system code `0003` or `80DE`.
-- **macOS, other readers** (CryptoTokenKit): reads `IDm` with `FF CA 00 00 00` and `PMm` with `FF CA 01 00 00` from the card already on the reader. There is no wait: if no card is present, the read completes at once with `success` `False`. `timeout` and `card` are not used.
-- **Windows** (PC/SC): waits up to `timeout` seconds for a card, then reads `IDm` and `PMm` with the same commands. `card` is not used.
+What differs per reader:
 
-With `system`, the result's `serviceData.data` holds the `090f` blocks, one 32-character hex string per 16-byte block. The number of blocks currently differs per reader (up to 18 on the RC-S380, 19 on CryptoTokenKit, 20 on Windows, all available blocks on the RC-S330).
+- **macOS, RC-S380** (libusb): polls for a card of the `card` type. FeliCa returns `IDm` and `PMm`. Type B returns `nfcid`, `appdata`, `pinfo` and `cid`, and has no usage history. Type A is not supported (the anti-collision sequence is not implemented), so the read runs until `timeout`.
+- **macOS, RC-S310/320/330** (libpafe): FeliCa only; `card` is not used. The history is read under system code `0003` or `80DE`.
+- **macOS, other readers** (CryptoTokenKit): waits for the reader to report a card, then reads `IDm` with `FF CA 00 00 00` and `PMm` with `FF CA 01 00 00`. `card` is not used.
+- **Windows** (PC/SC): waits for a card, then reads `IDm` and `PMm` with the same commands. `card` is not used.
+
+With `system`, the result's `serviceData.data` holds the `090f` blocks, one 32-character hex string per 16-byte block.
+
+**Changed in 4.1.0.** Up to 4.0.1, `timeout` was ignored by the RC-S330 (one 2-second attempt) and by CryptoTokenKit readers (no wait at all: no card meant an immediate failure). The number of history blocks also differed: up to 18 on the RC-S380, 19 on CryptoTokenKit, 20 on Windows, every block on the RC-S330. On Windows, readers other than the RC-S380 were sent a malformed SELECT FILE command for the history; they now get the same one as the RC-S380.
 
 ### Example
 
@@ -225,7 +229,7 @@ Until ($result.complete) | (Milliseconds>$deadline)
 
 - **`warning` in the result (macOS).** The 4D application is not signed with `com.apple.security.smartcard`; CryptoTokenKit readers may not be visible. Re-sign the app with the entitlement.
 - **PaSoRi missing from the list on macOS.** The plugin finds it by USB vendor/product ID; check the USB connection and adapter, and that no other application holds the device.
-- **Read never completes with `success`.** No card was presented within `timeout` (RC-S380, Windows), or no card was on the reader when the read started (macOS CryptoTokenKit), or the card type does not match `card` (RC-S380).
+- **Read never completes with `success`.** No card was presented within `timeout`, or the card type does not match `card` (RC-S380).
 - **Polling never sees `complete`.** The `uuid` is wrong, or its completed result was already returned once. Keep only the first completed result.
 - **Type B on the RC-S380 returns `success` with no identifiers.** Fixed in 4.0.1; 4.0.0 read them but did not return them.
 - **`090f` read fails behind a USB-C AV adapter (RC-S380).** Use a plain USB-C to USB adapter.
