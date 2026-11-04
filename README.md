@@ -4,152 +4,245 @@
 ![downloads](https://img.shields.io/github/downloads/miyako/4d-plugin-scard/total)
 
 # 4d-plugin-scard
-basic PC/SC implementation (read ``IDm``, ``PMm``) 
 
-### About
+Reads contactless cards (FeliCa, ISO 14443 Type B) from a card reader and returns the card identifiers (`IDm`, `PMm`) and, optionally, the FeliCa usage history (service `090f`) as 4D objects. On macOS the plugin uses CryptoTokenKit (`TKSmartCardSlotManager`) for readers that have a system driver, and talks USB directly (libusb, libpafe) to Sony PaSoRi readers that don't. On Windows it uses the PC/SC API (`SCardConnect`, `SCardTransmit`).
 
-WindowsのPC/SC API（``SCardEstablishContext``, ``SCardListReaders``, ``SCardGetStatusChange``, ``SCardConnect``, ``SCardTransmit``, ``SCardDisconnect``, ``SCardReleaseContext``）をコールしてスマートカードから``Idm``と``PMm``を取得するプラグインです。
+Reading runs on a background thread: [SCARD Read tag](#scard-read-tag) starts it and returns a session `uuid` at once, and [SCARD Get status](#scard-get-status) polls the result.
 
-検証には[``RC-S380``](https://www.sony.co.jp/Products/felica/consumer/products/RC-S380.html)を使用しました。カードリーダーの（PaSoRi）のドライバー（"[基本ソフトウェア](https://www.sony.co.jp/Products/felica/consumer/download/windows.html)"）をインストールしてください。
+> **Work in progress (4.0).** This branch merges [4d-plugin-scard-v0](https://github.com/miyako/4d-plugin-scard-v0), [-v2](https://github.com/miyako/4d-plugin-scard-v2) and [-v3](https://github.com/miyako/4d-plugin-scard-v3) into this repository. Its commands are those of scard-v3 3.1.x. The 1.x commands `SCARD READER LIST` and `SCARD Get info` are **not** in this build yet; use release [1.3.0](https://github.com/miyako/4d-plugin-scard/releases/tag/1.3.0) if you need them.
 
-内部的にFeliCa独自の拡張APDUをコールしていますが，UIDやATSを取得するためのAPDUは，[PCSC 3 v2で定義されている](https://stackoverflow.com/questions/13051167/apdu-command-to-get-smart-card-uid/19789290#19789290)らしいので，他社のカードリーダーでも動くと思います（たぶん）。
+| Command | Returns | Purpose |
+|---|---|---|
+| [SCARD Get readers](#scard-get-readers) | Object | List the card readers the plugin can use |
+| [SCARD Read tag](#scard-read-tag) | Object | Start reading a card on one reader, in the background |
+| [SCARD Get status](#scard-get-status) | Object | Get the progress and result of a read |
 
-[Advanced Card Systems Ltd.の仕様書](https://www.acs.com.hk/download-manual/4414/API-ACR1251U-1.08.pdf)
+**Platforms:** macOS 11.5 or later (Apple silicon and Intel), Windows 64-bit.
 
-[SONYの仕様書](https://www.sony.co.jp/Products/felica/business/products/ICS-D004.html)
+---
 
-[MSDN](https://msdn.microsoft.com/ja-jp/library/windows/hardware/dn905498(v=vs.85).aspx)
+## Requirements & platform notes
 
-[RC-S330](https://www.sony.co.jp/Products/felica/business/products/RC-S330.html)は，「PC/SCアクティベーター for Type B」をインストールしても，PC/SCのAPIでカードの情報を取得することはできません（ドキュメントより）。
+- **macOS entitlement.** CryptoTokenKit and the PC/SC framework are only available to a code-signed app that carries the [`com.apple.security.smartcard`](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_smartcard?language=objc) entitlement. The entitlement must be in the **4D application's** signature, not the plugin's. When it is missing, [SCARD Get readers](#scard-get-readers) and [SCARD Read tag](#scard-read-tag) add a `warning` property to their result. To sign an app with entitlements, see [4d-class-build-application](https://github.com/miyako/4d-class-build-application) and [signing with a free account](with-free-account.md).
+- **Sony PaSoRi on macOS.** There is no macOS driver for these readers, so the plugin opens them over USB itself and gives them its own names:
 
-macOSは，システムの[PCSC-Lite](http://pcsclite.alioth.debian.org)（PCSC Framework）を使用しています。システムに[ドライバー](https://github.com/acshk/acsccid)がインストールされているAdvanced Card Systems Ltd.のカードリーダー（[ACR1251CL-NTTCom](https://www.ntt.com/business/services/application/authentication/jpki/download7.html)など）であれば，動くかもしれません（未検証）。
+  | Reader | Name returned on macOS | Access |
+  |---|---|---|
+  | RC-S380 | `Sony FeliCa RC-S380` | libusb |
+  | RC-S310 / RC-S320 / RC-S330 | `Sony FeliCa RC-S310` / `…RC-S320` / `…RC-S330` | libpafe + libusb |
+  | RC-S300 | the name CryptoTokenKit reports | CryptoTokenKit |
 
-PCSC Framworkを公証サンドボックスアプリで使用するためには，[com.apple.security.smartcard](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_smartcard?language=objc)エンタイトルメント付きでアプリがコード署名されていなければなりません。エンタイトルメントは，プラグインではなく，アプリ本体側のコード署名に含まれている必要があります。エンタイトルメント付きでアプリをコード署名する方法については[コード署名ツール](https://github.com/miyako/4d-class-build-application)を参照してください。
+  On Windows the vendor driver is used, and readers appear under their PC/SC names (the RC-S380 is `Sony FeliCa Port/PaSoRi 3.0 0`).
+- **Tested combinations** (from the scard-v3 README):
 
-[無料メンバーシップでコード署名](https://github.com/miyako/4d-plugin-scard/blob/master/with-free-account.md)も参照
+  | Platform | Reader | IDm/PMm | Usage history (`090f`) |
+  |---|---|---|---|
+  | macOS | RC-S300 | OK | OK |
+  | macOS | RC-S380 | OK | OK |
+  | macOS | RC-S330 | OK | OK |
+  | Windows | RC-S380 | OK | OK |
+  | Windows | RC-S330 | not recognised | not recognised |
 
-## Syntax
+  An RC-S380 connected through a USB-C Digital AV Multiport adapter returns IDm/PMm but fails reading `090f`; a plain USB-C to USB adapter works.
+- **Failure is reported in the result, never as a 4D error.** Check `success` (and `complete` for a read).
+- All three commands are thread-safe and can be called from a preemptive process.
 
+---
+
+## SCARD Get readers
+
+### Syntax
+
+```4d
+status:=SCARD Get readers(options)
 ```
-SCARD READER LIST (readers)
+
+| Parameter | Type | Description |
+|---|---|---|
+| `options` | Object | **On Windows**: `scope`, the PC/SC context scope (`0` user, the default; `1` terminal; `2` system). Other values are ignored. **On macOS**: ignored. |
+| Result | Object | See below |
+
+| Property | Type | Description |
+|---|---|---|
+| `success` | Boolean | `True` if the reader list could be obtained |
+| `readers` | Collection | One object per reader |
+| `readers[].slotName` | Text | Reader name; pass it to [SCARD Read tag](#scard-read-tag) |
+| `warning` | Text | macOS only: the `com.apple.security.smartcard` entitlement is missing |
+
+### Description
+
+**On macOS**, the list contains the CryptoTokenKit slots, followed by any Sony PaSoRi found on USB (by vendor and product ID) under the names in the table above. `success` is `True` when CryptoTokenKit is available, even if no reader is connected.
+
+**On Windows**, the list comes from `SCardListReaders`. If the smart card service is not running, the plugin waits up to 5 seconds for it to start. When no reader is connected, `success` is `False`.
+
+### Example
+
+From the plugin's own test method (`TEST_w.4dm`):
+
+```4d
+$status:=SCARD Get readers 
+
+If ($status.success)
+	
+	If (Is macOS:C1572)
+		$readers:=$status.readers.query("slotName == :1";"Sony FeliCa RC-S3@")
+	Else 
+		$readers:=$status.readers
+	End if 
 ```
 
-Parameter|Type|Description
-------------|------------|----
-readers|ARRAY TEXT|カードリーダーの名称
+---
 
+## SCARD Read tag
+
+### Syntax
+
+```4d
+status:=SCARD Read tag(params)
 ```
-info:=SCARD Get info (reader;mode;protocols;timeout;error)
+
+| Parameter | Type | Description |
+|---|---|---|
+| `params.slotName` | Text | Reader name from [SCARD Get readers](#scard-get-readers) |
+| `params.timeout` | Integer | Seconds to wait for a card. Default `60`. Values outside 1–86400 are ignored (since this branch). See below for which readers use it. |
+| `params.card` | Text | `"FeliCa"` (default), `"TypeB"` or `"TypeA"`. Only used by the RC-S380 on macOS. |
+| `params.system` | Boolean | `True` to also read the FeliCa usage history (service `090f`). Default `False`. |
+| Result | Object | See below |
+
+| Property | Type | Description |
+|---|---|---|
+| `uuid` | Text | Session identifier; pass it to [SCARD Get status](#scard-get-status) |
+| `warning` | Text | macOS only: the `com.apple.security.smartcard` entitlement is missing |
+
+### Description
+
+The command returns immediately; the read runs on a background thread. Poll [SCARD Get status](#scard-get-status) with the returned `uuid` until `complete` is `True`.
+
+How the card is read depends on the reader:
+
+- **macOS, RC-S380**: polls for a card of the `card` type until `timeout` seconds have passed. FeliCa returns `IDm` and `PMm`. Type B is detected (`success` becomes `True`) but its identifiers are not returned yet. Type A is not supported (the anti-collision sequence is not implemented), so the read runs until `timeout`.
+- **macOS, RC-S310/320/330**: polls once for a FeliCa card (about 2 seconds); `timeout` and `card` are not used. With `system`, the history is read from system code `0003` or `80DE`.
+- **macOS, other readers** (CryptoTokenKit): reads `IDm` with `FF CA 00 00 00` and `PMm` with `FF CA 01 00 00` from the card already on the reader. There is no wait: if no card is present, the read completes at once with `success` `False`. `timeout` and `card` are not used.
+- **Windows** (PC/SC): waits up to `timeout` seconds for a card, then reads `IDm` and `PMm` with the same commands. `card` is not used.
+
+With `system`, the result's `serviceData.data` holds the `090f` blocks, one 32-character hex string per 16-byte block. The number of blocks currently differs per reader (up to 18 on the RC-S380, 19 on CryptoTokenKit, 20 on Windows, all available blocks on the RC-S330).
+
+### Example
+
+From the plugin's own test method (`TEST_w.4dm`):
+
+```4d
+$params:=New object:C1471
+$params.slotName:=$readers[0].slotName
+$params.timeout:=3  //seconds; default=60
+$params.card:="FeliCa"  //FeliCa,TypeB,TypeA
+$params.system:=Bool:C1537($form.system)
+
+$status:=SCARD Read tag ($params)
+
+Repeat 
+	
+	$status:=SCARD Get status ($status.uuid)
+	
+	DELAY PROCESS:C323(Current process:C322;10)
+	
+Until ($status.complete)
 ```
 
-Parameter|Type|Description
-------------|------------|----
-reader|TEXT|カードリーダーの名称
-mode|LONGINT|[共有モード](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379473(v=vs.85).aspx): ``SCARD_SHARE_SHARED``または``SCARD_SHARE_EXCLUSIVE``
-protocols|LONGINT|[プロトコル](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379473(v=vs.85).aspx): ``SCARD_PROTOCOL_T0``と``SCARD_PROTOCOL_T1``の組み合わせ
-timeout|LONGINT|タイムアウト（ミリ秒）カードが認識できない場合，この時間まで待機します。
-error|LONGINT|エラーコード（``0``=成功）
-info|TEXT|取得した情報（``JSON``）
+---
 
-* ``info``オブジェクト
+## SCARD Get status
 
-``IDm``: ``string`` カードUID（16進数）  
-``PMm``: ``string`` カードATS-HB/INF/PMm（16進数）  
-``state``: ``number``   [リーダーの状態](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379808(v=vs.85).aspx)  
-``card``: ``string`` カード識別ID（16進数）  
-``type``: ``string`` カード種別（16進数）  
-``typeName``: ``string`` カード種別名称  
-``name``: ``string`` カード名称（検証した範囲では常に空でした）  
+### Syntax
 
-* PCSC 3 v2で定義されているAPDU
-
-カードUIDの取得: ``FF CA 00 00 00``  
-カードATS-HB(ISO14443-4A)/INF(ISO14443B)/PMm(FeliCa)の取得: ``FF CA 01 00 00``  
-
-* FeliCa独自定義（拡張）APDU
-
-カード識別IDの取得: ``FF CA F0 00 00``  
-カード名称の取得: ``FF CA F1 00 00``  
-カード種別の取得: ``FF CA F3 00 00``  
-カード種別名称の取得: ``FF CA F4 00 00``  
-
-* カードUID
-
-ISO14443A: Cascade Level 1/2/3 の UID（4/7/10 bytes）  
-ISO14443B: PUPI（4 bytes）  
-PicoPass(iCLASS): SN（8 bytes）    
-NFC Type 1 Tag: UID（7 bytes）  
-FeliCa: IDm（8 bytes）  
-
-* カード種別
-
-``01``:ISO14443A  
-``02``:ISO14443B  
-``03``:PicoPassB  
-``04``:FeliCa  
-``05``:NFC Type 1 Tag    
-``06``:Mifare Emulation Card    
-``07``:ISO14443-4A  
-``08``:ISO14443-4B  
-``09``:TypeA NFC-DEP ターゲット  
-``0A``:FeliCa NFC-DEP ターゲット  　
-
-### Examples
-
-<img width="290" alt="2018-04-20 13 10 26" src="https://user-images.githubusercontent.com/1725068/39030535-854c2088-449d-11e8-8400-76c1ca224356.png">
-
+```4d
+status:=SCARD Get status(uuid)
 ```
-$Readers:=OBJECT Get pointer(Object named;"Readers")
 
-$event:=Form event
+| Parameter | Type | Description |
+|---|---|---|
+| `uuid` | Text | Session identifier returned by [SCARD Read tag](#scard-read-tag) |
+| Result | Object | See below |
 
-Case of 
-	: ($event=On Unload)
-		
-		SET TIMER(0)
-		
-	: ($event=On Load)
-		
-		SCARD READER LIST ($Readers->)
-		
-		If (Size of array($Readers->)#0)
-			$Readers->:=1
-			SET TIMER(50)
-		End if 
-		
-	: ($event=On Timer)
-		
-		$reader:=$Readers->{$Readers->}
-		$mode:=SCARD_SHARE_SHARED
-		$protocols:=SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1
-		$timeout:=50
-		$error:=0
-		
-		$info:=SCARD Get info ($reader;$mode;$protocols;$timeout;$error)
-		
-		If ($error=0)
-			
-			$o:=JSON Parse($info)
-			
-			$state:=OB Get($o;"state";Is longint)
-			
-			If ($state & SCARD_STATE_PRESENT)=SCARD_STATE_PRESENT
-				OBJECT Get pointer(Object named;"IDm")->:=OB Get($o;"IDm";Is text)
-				OBJECT Get pointer(Object named;"PMm")->:=OB Get($o;"PMm";Is text)
-				OBJECT Get pointer(Object named;"type")->:=OB Get($o;"type";Is text)
-				OBJECT Get pointer(Object named;"typeName")->:=OB Get($o;"typeName";Is text)
-				OBJECT Get pointer(Object named;"card")->:=OB Get($o;"card";Is text)
-				OBJECT Get pointer(Object named;"cardName")->:=OB Get($o;"cardName";Is text)
-			Else 
-				OBJECT Get pointer(Object named;"IDm")->:=""
-				OBJECT Get pointer(Object named;"PMm")->:=""
-				OBJECT Get pointer(Object named;"type")->:=""
-				OBJECT Get pointer(Object named;"typeName")->:=""
-				OBJECT Get pointer(Object named;"card")->:=""
-				OBJECT Get pointer(Object named;"cardName")->:=""
-			End if 
-      
-		End if 
-		
-End case 
+| Property | Type | Description |
+|---|---|---|
+| `uuid` | Text | The session identifier |
+| `complete` | Boolean | `True` once the read has finished, whether or not it succeeded |
+| `success` | Boolean | `True` if at least one identifier was read |
+| `slotName` | Text | Reader name; empty until `complete` is `True` |
+| `IDm` | Text | Card UID (FeliCa IDm), lowercase hex. Absent if not read. |
+| `PMm` | Text | FeliCa PMm (or ATS historical bytes), lowercase hex. Absent if not read. |
+| `serviceData` | Object | Only with `system`: `code` (`"090f"`) and `data`, a collection of hex block strings |
+| `errorMessage` | Text | macOS CryptoTokenKit only: why the reader could not be opened |
+
+### Description
+
+Once a call returns `complete` = `True`, the session is deleted. A later call with the same `uuid`, or with an unknown `uuid`, returns `complete` = `False` and `success` = `False`, and keeps doing so. Stop polling at the first completed result, and give your polling loop its own deadline.
+
+`IDm` and `PMm` are up to 8 bytes (16 hex characters). Since this branch, a shorter UID is returned at its real length on macOS CryptoTokenKit (scard-v3 padded it with whatever bytes followed in memory).
+
+### Example
+
+From the plugin's own test method (`TEST_w.4dm`), handling the completed status in the form:
+
+```4d
+If ($status.success)
+	If ($status.serviceData#Null:C1517)
+		Form:C1466.serviceData:=$status.serviceData
+		Form:C1466.info:=map_090f (Form:C1466.serviceData.data)
+	End if 
+	
+	Form:C1466.IDm:=$status.IDm
+Else 
+	Form:C1466.IDm:=""
+	Form:C1466.serviceData:=Null:C1517
+	Form:C1466.info:=Null:C1517
+End if 
 ```
+
+The test database's `map_090f` and `parse_090f` methods decode the `090f` blocks of Japanese transit IC cards (date, balance, stations).
+
+A polling loop with its own deadline:
+
+```4d
+$status:=SCARD Read tag(New object("slotName"; $slotName; "timeout"; 10))
+$deadline:=Milliseconds+15000
+
+Repeat 
+	DELAY PROCESS(Current process; 10)
+	$result:=SCARD Get status($status.uuid)
+Until ($result.complete) | (Milliseconds>$deadline)
+```
+
+---
+
+## Error handling & troubleshooting
+
+- **`warning` in the result (macOS).** The 4D application is not signed with `com.apple.security.smartcard`; CryptoTokenKit readers may not be visible. Re-sign the app with the entitlement.
+- **PaSoRi missing from the list on macOS.** The plugin finds it by USB vendor/product ID; check the USB connection and adapter, and that no other application holds the device.
+- **Read never completes with `success`.** No card was presented within `timeout` (RC-S380, Windows), or no card was on the reader when the read started (macOS CryptoTokenKit), or the card type does not match `card` (RC-S380).
+- **Polling never sees `complete`.** The `uuid` is wrong, or its completed result was already returned once. Keep only the first completed result.
+- **Type B on the RC-S380 returns `success` with no identifiers.** Known gap; the PUPI and application data are read but not returned yet.
+- **`090f` read fails behind a USB-C AV adapter (RC-S380).** Use a plain USB-C to USB adapter.
+- **Quitting 4D waits for running reads.** On quit, the plugin waits for every unfinished read to end, which can take up to its `timeout`.
+
+---
+
+## Quick reference
+
+```4d
+$readers:=SCARD Get readers(New object).readers
+$status:=SCARD Read tag(New object("slotName"; $readers[0].slotName; "timeout"; 10; "system"; True))
+Repeat 
+	DELAY PROCESS(Current process; 10)
+	$result:=SCARD Get status($status.uuid)
+Until ($result.complete)
+// $result.success, $result.IDm, $result.PMm, $result.serviceData.data
+```
+
+## References
+
+* [PaSoRi RC-S380 specifics](https://tomosoft.jp/design/?p=5543)
+* [Accessing FeliCa Lite over PC/SC in C](https://qiita.com/gpsnmeajp/items/d4810b175189609494ac)
+* [Reading Suica history with WebUSB](https://www.kenichi-odo.com/articles/2020_10_11_read-suica-by-webusb)
+* [nfcpy](https://github.com/nfcpy/nfcpy), whose RC-S380 and RC-S956 drivers document the Sony protocols
