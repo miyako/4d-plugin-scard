@@ -18,26 +18,46 @@
 
 static std::mutex scardMutex;
 static Json::Value scardStorage;
+/* scardTasks has its own mutex: the commands are threadSafe, so Read tag and
+   Get status can run at the same time in different preemptive processes */
+static std::mutex scardTasksMutex;
 static std::map< std::string, std::future<void> >scardTasks;
 
 #pragma mark -
 
 static void scard_clear(std::string& uuid) {
-    std::map< std::string, std::future<void> >::iterator it = scardTasks.find(uuid);
-    if(it != scardTasks.end()) {
+    std::future<void> task;
+    bool found = false;
+    if(1) {
+        std::lock_guard<std::mutex> lock(scardTasksMutex);
+        std::map< std::string, std::future<void> >::iterator it = scardTasks.find(uuid);
+        if(it != scardTasks.end()) {
+            task = std::move(it->second);
+            scardTasks.erase(it);
+            found = true;
+        }
+    }
+    if(found) {
+        /* wait outside the locks: the worker takes scardMutex before it returns */
+        if(task.valid()) task.wait();
+        std::lock_guard<std::mutex> lock(scardMutex);
         scardStorage.removeMember(uuid);
-        it->second.get();
-        scardTasks.erase(it);
     }
 }
 
 static void scard_clear_all() {
-    for( auto it = scardTasks.begin(); it != scardTasks.end() ; ++it ) {
-        std::string uuid = it->first;
-        scardStorage.removeMember(uuid);
-        it->second.get();
+    std::map< std::string, std::future<void> > tasks;
+    if(1) {
+        std::lock_guard<std::mutex> lock(scardTasksMutex);
+        tasks.swap(scardTasks);
     }
-    scardTasks.clear();
+    for( auto it = tasks.begin(); it != tasks.end() ; ++it ) {
+        if(it->second.valid()) it->second.wait();
+    }
+    std::lock_guard<std::mutex> lock(scardMutex);
+    for( auto it = tasks.begin(); it != tasks.end() ; ++it ) {
+        scardStorage.removeMember(it->first);
+    }
 }
 
 #pragma mark -
@@ -92,8 +112,10 @@ static void generateUuid(std::string &uuid) {
         }
     }
 #else
-    NSString *u = [[[NSUUID UUID]UUIDString]stringByReplacingOccurrencesOfString:@"-" withString:@""];
-    uuid = [u UTF8String];
+    @autoreleasepool {
+        NSString *u = [[[NSUUID UUID]UUIDString]stringByReplacingOccurrencesOfString:@"-" withString:@""];
+        uuid = [u UTF8String];
+    }
 #endif
 }
 
@@ -103,7 +125,7 @@ static void print_hex(const uint8_t *pbtData, const size_t szBytes, std::string 
     memset((char *)&buf[0], 0, buf.size());
     
     for (size_t i = 0; i < szBytes; ++i) {
-        sprintf((char *)&buf[i * 2], "%02x", pbtData[i]);
+        snprintf((char *)&buf[i * 2], 3, "%02x", pbtData[i]);
     }
     
     hex = std::string((char *)&buf[0], (szBytes * 2));
@@ -130,8 +152,11 @@ static bool get_usb_information(libusb_device_handle *dh, usb_device_info *devin
     devinfo->dh = dh;
     devinfo->dev = dev;
     
-    libusb_get_config_descriptor(dev, 0, &conf);
-    
+    if(libusb_get_config_descriptor(dev, 0, &conf) != LIBUSB_SUCCESS) {
+        /* conf is not set on failure */
+        return false;
+    }
+
     for(int i = 0; i < (int)conf->bNumInterfaces; i++){
         intf = &conf->interface[i];
         for(int j = 0; j < intf->num_altsetting; j++){
@@ -380,20 +405,22 @@ static void SCARD_Get_readers(PA_PluginParameters params) {
     std::string errorMessage;
     bool success = false;
     
-    TKSmartCardSlotManager *manager = [TKSmartCardSlotManager defaultManager];
-    
-    if(manager) {
-        NSArray<NSString *> *slotNames = [manager slotNames];
-        for (NSString *slotName in slotNames) {
-            PA_ObjectRef o = PA_CreateObject();
-            ob_set_s(o, L"slotName", (const char *)[slotName UTF8String]);
-            PA_Variable v = PA_CreateVariable(eVK_Object);
-            PA_SetObjectVariable(&v, o);
-            PA_SetCollectionElement(readers, PA_GetCollectionLength(readers), v);
+    @autoreleasepool {
+        TKSmartCardSlotManager *manager = [TKSmartCardSlotManager defaultManager];
+
+        if(manager) {
+            NSArray<NSString *> *slotNames = [manager slotNames];
+            for (NSString *slotName in slotNames) {
+                PA_ObjectRef o = PA_CreateObject();
+                ob_set_s(o, L"slotName", (const char *)[slotName UTF8String]);
+                PA_Variable v = PA_CreateVariable(eVK_Object);
+                PA_SetObjectVariable(&v, o);
+                PA_SetCollectionElement(readers, PA_GetCollectionLength(readers), v);
+            }
+            success = true;
+        }else{
+            errorMessage = "TKSmartCardSlotManager::defaultManager() failed";
         }
-        success = true;
-    }else{
-        errorMessage = "TKSmartCardSlotManager::defaultManager() failed";
     }
 #else
      /*
@@ -481,10 +508,10 @@ static void SCARD_Get_readers(PA_PluginParameters params) {
                 if(libusb_result >= 0) {
                     std::vector<uint8_t> buf(5);
                     memset ((char *)&buf[0], 0, buf.size());
-                    sprintf((char *)&buf[0], "%04x", desc.idVendor);
+                    snprintf((char *)&buf[0], buf.size(), "%04x", desc.idVendor);
                     std::string _vid = std::string((char *)&buf[0], 4);
                     memset ((char *)&buf[0], 0, buf.size());
-                    sprintf((char *)&buf[0], "%04x", desc.idProduct);
+                    snprintf((char *)&buf[0], buf.size(), "%04x", desc.idProduct);
                     std::string _pid = std::string((char *)&buf[0], 4);
                     
                     char *end;
@@ -578,9 +605,10 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
 			}
 		}
 		if (ob_is_defined(args, L"timeout")) {
-			int _timeout = ob_get_n(args, L"timeout");
-			if (_timeout > 0) {
-				timeout = _timeout;
+			/* range-check the double before the cast: out-of-range float -> int is undefined */
+			double _timeout = ob_get_n(args, L"timeout");
+			if ((_timeout >= 1) && (_timeout <= 86400)) {
+				timeout = (unsigned int)_timeout;
 			}
 		}
 		get_system = ob_get_b(args, L"system");
@@ -664,6 +692,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
             libusb_device_id = LIBUSB_SONY_RC_S330;
         }
         
+        /* worker thread: no autorelease pool unless we create one */
+        @autoreleasepool {
         if(libusb_device_id != 0) {
             
             /* libpafe */
@@ -678,7 +708,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
             Json::Value serviceData(Json::objectValue);
             
             bool isPolling = false;
-            
+            bool libusb_ready = false;
+
             switch (libusb_device_id) {
                 case LIBUSB_SONY_RC_S330:
                     p = pasori_open();
@@ -693,6 +724,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                 case LIBUSB_SONY_RC_S380:
                     int libusb_result = libusb_init(NULL);
                     if(libusb_result >= 0) {
+                        libusb_ready = true;
                         device = libusb_open_device_with_vid_pid(NULL, LIBUSB_SONY, libusb_device_id);
                         if(device) {
                             // usb interface setting
@@ -838,7 +870,9 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                 
                             case LIBUSB_SONY_RC_S380:
                                 len = packet_sens_req(devinfop, nfc_type, usbbufp, LIBUSB_API_TIMEOUT_FOR_POLLING);
-                                if(len >= 0) {
+                                /* len is size_t: >= 0 was always true, so an I/O error (0)
+                                   re-parsed the previous response and never slept */
+                                if(len > 0) {
                                     if(usbbuf[9] == 0x05 && usbbuf[10] == 0x00) {
                                         int rlen = ((usbbuf[6] << 8) + usbbuf[5]);
                                         if(rlen == 27) {
@@ -969,7 +1003,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                     
                                     if(elapsedTime < timeout) {
                                         len = packet_sens_req(devinfop, nfc_type, usbbufp, LIBUSB_API_TIMEOUT_FOR_POLLING);
-                                        if(len >= 0) {
+                                        if(len > 0) {
                                             if(usbbuf[9] == 0x05 && usbbuf[10] == 0x00) {
                                                 int rlen = ((usbbuf[6] << 8) + usbbuf[5]);
                                                 switch (rlen) {
@@ -1001,6 +1035,9 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                     packet_write(devinfop, cmd, sizeof(cmd), usbbufp, timeout);//InCommRF
                                                 }
                                             }
+                                        }else{
+                                            /* read/write error */
+                                            usleep(LIBUSB_USLEEP_DURATION);
                                         }
                                     }else{
                                         /* timeout */
@@ -1021,6 +1058,18 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                         libusb_close(device);
                         libusb_exit(NULL);
                         break;
+                }
+            }else{
+                /* initialisation failed: release whatever was opened before */
+                if(p) {
+                    pasori_close(p);
+                }
+                if(device) {
+                    libusb_release_interface(device, 0);
+                    libusb_close(device);
+                }
+                if(libusb_ready) {
+                    libusb_exit(NULL);
                 }
             }
         }else
@@ -1051,7 +1100,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                                 length:sizeof pbSendBuffer_GetIDm]
                                                                  reply:^(NSData *response, NSError *error) {
                                     
-                                    if (error == nil)
+                                    /* a response shorter than SW1 SW2 would make NSMakeRange throw on TK's queue */
+                                    if ((error == nil) && ([response length] >= 2))
                                     {
                                         uint8_t SW1 = 0;
                                         uint8_t SW2 = 0;
@@ -1066,7 +1116,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                         }
                                         else
                                         {
-                                            print_hex((const uint8_t *)[response bytes], 8, IDm);
+                                            size_t uidLength = [response length] - 2;
+                                            print_hex((const uint8_t *)[response bytes], uidLength < 8 ? uidLength : 8, IDm);
                                             success = true;
                                         }
                                         
@@ -1083,7 +1134,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                                         length:sizeof pbSendBuffer_GetPMm]
                                                                          reply:^(NSData *response, NSError *error) {
                                             
-                                            if (error == nil)
+                                            if ((error == nil) && ([response length] >= 2))
                                             {
                                                 uint8_t SW1 = 0;
                                                 uint8_t SW2 = 0;
@@ -1098,7 +1149,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                 }
                                                 else
                                                 {
-                                                    print_hex((const uint8_t *)[response bytes], 8, PMm);
+                                                    size_t pmmLength = [response length] - 2;
+                                                    print_hex((const uint8_t *)[response bytes], pmmLength < 8 ? pmmLength : 8, PMm);
                                                     success = true;
                                                 }
                                                 
@@ -1179,6 +1231,20 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                                                 usleep(TK_USLEEP_DURATION_FOR_POLLING);
                                                             }else{
                                                                 NSLog(@"transmitRequest(SELECT FILE) error!");
+                                                                /* count the failed request too, otherwise cnt never
+                                                                   reaches 19 and the worker waits on sem forever */
+                                                                cnt++;
+                                                                if(cnt == 19){
+                                                                    [smartCard endSession];
+
+                                                                    service["data"] = data;
+
+                                                                    Json::StreamWriterBuilder writer;
+                                                                    writer["indentation"] = "";
+                                                                    serviceDataJson = Json::writeString(writer, service);
+
+                                                                    dispatch_semaphore_signal(sem);
+                                                                }
                                                             }
                                                             
                                                         }];
@@ -1211,6 +1277,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                         }];
                         // wait for the asynchronous blocks to finish
                         dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+                        /* MRC: balance dispatch_semaphore_create; blocks still pending hold their own reference */
+                        dispatch_release(sem);
                     }else{
                         errorMessage = "TKSmartCard::makeSmartCard() failed";
                     }
@@ -1222,6 +1290,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
             }
   
         }
+        } /* @autoreleasepool */
 #else
      /*
       
@@ -1291,6 +1360,8 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                             if(elapsedTime < timeout) {
 
                                 if (readerState.dwEventState & SCARD_STATE_EMPTY) {
+                                    /* with dwCurrentState left at UNAWARE the call returns at once: busy loop */
+                                    readerState.dwCurrentState = readerState.dwEventState & ~SCARD_STATE_CHANGED;
                                     lResult = SCardGetStatusChange(hContext, LIBPCSC_API_TIMEOUT, &readerState, 1);
                                 }
                                 
@@ -1315,7 +1386,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                             SCARDHANDLE hCard;
                             DWORD dwActiveProtocol;
                             DWORD dwProtocol;
-                            DWORD dwAtrSize;
+                            DWORD dwAtrSize = sizeof(BYTE) * 256; /* in/out: must hold the buffer size */
                             DWORD dwState;
                             
                             BYTE atr[256];
@@ -1391,6 +1462,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                         switch(lResult)
                                         {
                                             case SCARD_S_SUCCESS:
+                                                if (cbRecvLength < 2) break; /* no SW1 SW2: avoid reading before the buffer */
                                                 SW1 = pbRecvBuffer[cbRecvLength - 2];
                                                 SW2 = pbRecvBuffer[cbRecvLength - 1];
                                                 if ( SW1 != 0x90 || SW2 != 0x00 )
@@ -1427,6 +1499,7 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
                                         switch(lResult)
                                         {
                                             case SCARD_S_SUCCESS:
+                                                if (cbRecvLength < 2) break; /* no SW1 SW2: avoid reading before the buffer */
                                                 SW1 = pbRecvBuffer[cbRecvLength - 2];
                                                 SW2 = pbRecvBuffer[cbRecvLength - 1];
                                                 if ( SW1 != 0x90 || SW2 != 0x00 )
@@ -1477,14 +1550,11 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
 													if (lResult == SCARD_S_SUCCESS) {
 														cbRecvLength = 2048;
 
-														SCARD_IO_REQUEST pci;
-														pci.cbPciLength = cbRecvLength;
-
 														lResult = SCardTransmit(hCard,
 															SCARD_PCI_T1,
 															pbSendBuffer_ReadBinary,
 															sizeof(pbSendBuffer_ReadBinary),
-															&pci,
+															NULL, /* was a SCARD_IO_REQUEST on the stack claiming 2048 bytes */
 															pbRecvBuffer,
 															&cbRecvLength);
 
@@ -1534,12 +1604,15 @@ static void SCARD_Read_tag(PA_PluginParameters params) {
         }
     };
     
-    scardTasks.insert(std::map< std::string,
-                      std::future<void> >::value_type(uuid,
-                                                      std::async(std::launch::async,
-                                                                 func,
-                                                                 uuid,
-                                                                 slotName)));
+    std::future<void> task = std::async(std::launch::async,
+                                        func,
+                                        uuid,
+                                        slotName);
+    if(1) {
+        std::lock_guard<std::mutex> lock(scardTasksMutex);
+        scardTasks.insert(std::map< std::string,
+                          std::future<void> >::value_type(uuid, std::move(task)));
+    }
     
 #if VERSIONMAC
     if(!checkAccess(status)) {
@@ -1565,9 +1638,11 @@ static void SCARD_Get_status(PA_PluginParameters params) {
     bool success = false;
     std::string slotName, errorMessage, IDm, PMm, nfcid, appdata, pinfo, cid, serviceDataJson;
     
-    Json::Value threadCtx = scardStorage[uuid];
+    std::unique_lock<std::mutex> storageLock(scardMutex);
+    /* isMember: operator[] would insert a null entry for an unknown uuid */
+    Json::Value threadCtx = scardStorage.isMember(uuid) ? scardStorage[uuid] : Json::Value();
+    storageLock.unlock();
     if(threadCtx.isObject()) {
-        std::lock_guard<std::mutex> lock(scardMutex);
         success = threadCtx["success"].asBool();
         complete = threadCtx["complete"].asBool();
         slotName = threadCtx["slotName"].asString();
@@ -1665,17 +1740,23 @@ static bool checkAccess(PA_ObjectRef status) {
      
      */
     
-    SecTaskRef sec = SecTaskCreateFromSelf(kCFAllocatorMalloc);
-    CFErrorRef err = nil;
-    CFBooleanRef boolValue = (CFBooleanRef)SecTaskCopyValueForEntitlement(sec,
-                                                                          CFSTR("com.apple.security.smartcard"),
-                                                                          &err);
+    SecTaskRef sec = SecTaskCreateFromSelf(kCFAllocatorDefault);
+    if(!sec) {
+        return false;
+    }
+    CFErrorRef err = NULL;
+    CFTypeRef value = SecTaskCopyValueForEntitlement(sec,
+                                                     CFSTR("com.apple.security.smartcard"),
+                                                     &err);
     if(!err) {
-        if(boolValue) {
-            entitlement = CFBooleanGetValue(boolValue);
+        if((value) && (CFGetTypeID(value) == CFBooleanGetTypeID())) {
+            entitlement = CFBooleanGetValue((CFBooleanRef)value);
         }
     }
-    
+
+    /* Copy rule: both are owned by the caller */
+    if(value) CFRelease(value);
+    if(err) CFRelease(err);
     CFRelease(sec);
         
     return entitlement;
