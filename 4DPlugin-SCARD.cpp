@@ -423,6 +423,7 @@ static void SCARD_Get_readers(PA_PluginParameters params) {
                 PA_Variable v = PA_CreateVariable(eVK_Object);
                 PA_SetObjectVariable(&v, o);
                 PA_SetCollectionElement(readers, PA_GetCollectionLength(readers), v);
+                PA_ClearVariable(&v);
             }
             success = true;
         }else{
@@ -568,6 +569,7 @@ static void SCARD_Get_readers(PA_PluginParameters params) {
                             PA_Variable v = PA_CreateVariable(eVK_Object);
                             PA_SetObjectVariable(&v, o);
                             PA_SetCollectionElement(readers, PA_GetCollectionLength(readers), v);
+                            PA_ClearVariable(&v);
                             success = true;
                         }
                     }
